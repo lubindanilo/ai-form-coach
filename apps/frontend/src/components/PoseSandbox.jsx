@@ -5,7 +5,19 @@ import {
   createPoseLandmarkerWithFallback,
 } from "../lib/poseLandmarkerFactory.js";
 import { augmentPose, POSE_IDX } from "../lib/poseAugment.js";
-import VideoUploadAnalyzer from "./VideoUploadAnalyzer.jsx";
+import PoseControls from "./pose/PoseControls.jsx";
+import PoseResultPanel from "./pose/PoseResultPanel.jsx";
+import PoseKeypointsPanel from "./pose/PoseKeypointsPanel.jsx";
+import {
+  confFrom,
+  drawExtraPoints,
+  drawPose,
+  fetchJson,
+  loadImageFromUrl,
+  mapLandmarksForApi,
+  round4,
+  safeDetectForImage,
+} from "../lib/poseSandboxUtils.js";
 
 const KEYPOINTS = [
   // Core strength joints
@@ -18,134 +30,127 @@ const KEYPOINTS = [
   { name: "LEFT_ANKLE", idx: POSE_IDX.LEFT_ANKLE },
   { name: "RIGHT_ANKLE", idx: POSE_IDX.RIGHT_ANKLE },
 
-  // Foot details (often forgotten)
+  // Foot details
   { name: "LEFT_HEEL", idx: POSE_IDX.LEFT_HEEL },
   { name: "RIGHT_HEEL", idx: POSE_IDX.RIGHT_HEEL },
   { name: "LEFT_FOOT_INDEX", idx: POSE_IDX.LEFT_FOOT_INDEX },
   { name: "RIGHT_FOOT_INDEX", idx: POSE_IDX.RIGHT_FOOT_INDEX },
 ];
 
-function round4(v) {
-  if (typeof v !== "number" || Number.isNaN(v)) return 0;
-  return Math.round(v * 10000) / 10000;
-}
-
-function confFrom(lm) {
-  const v = typeof lm.visibility === "number" ? lm.visibility : null;
-  const p = typeof lm.presence === "number" ? lm.presence : null;
-  if (typeof v === "number" && typeof p === "number") return Math.min(v, p);
-  if (typeof v === "number") return v;
-  if (typeof p === "number") return p;
-  return 0;
-}
-
-function dist2D(a, b) {
-  const dx = (a?.x ?? 0) - (b?.x ?? 0);
-  const dy = (a?.y ?? 0) - (b?.y ?? 0);
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
 export default function PoseSandbox() {
-  // Webcam elements
-  const videoRef = useRef(null);
+  // Canvas
   const canvasRef = useRef(null);
-
-  // Landmarker + draw
-  const landmarkerRef = useRef(null);
   const drawingUtilsRef = useRef(null);
 
-  // Webcam runtime
-  const streamRef = useRef(null);
-  const rafRef = useRef(null);
+  // Landmarker
+  const landmarkerRef = useRef(null);
 
-  // UI state
-  const [status, setStatus] = useState("idle"); // idle | loading | running | stopped | error
+  // UI
+  const [status, setStatus] = useState("idle"); // idle | ready | loading | done | error
   const [error, setError] = useState("");
-  const [fps, setFps] = useState(0);
 
-  // Input mode
-  const [inputMode, setInputMode] = useState("webcam"); // webcam | upload
+  // File / preview
+  const [file, setFile] = useState(null);
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageInfo, setImageInfo] = useState({ w: 0, h: 0, name: "" });
 
   // Model selection
   const [activeModel, setActiveModel] = useState("unknown"); // full | lite | unknown
   const [modelMode, setModelMode] = useState("auto"); // auto | full | lite
 
-  // Webcam previews
+  // Previews
   const [preview, setPreview] = useState([]);
   const [derivedPreview, setDerivedPreview] = useState([]);
+  const [poseLandmarks, setPoseLandmarks] = useState(null); // raw 33 landmarks from MediaPipe (first pose)
 
-  // Metrics (webcam only)
-  const [metrics, setMetrics] = useState({
-    frames: 0,
-    missFrames: 0,
-    missRatePct: 0,
-    avgConf: 0,
-    avgJitter: 0,
-  });
-
-  const metricsRef = useRef({
-    frames: 0,
-    missFrames: 0,
-    confSum: 0,
-    confCount: 0,
-    jitterSum: 0,
-    jitterCount: 0,
-    lastPose: null,
-    lastUiUpdate: performance.now(),
-  });
-
-  const lastFpsTsRef = useRef(performance.now());
-  const fpsFramesRef = useRef(0);
-  const frameCounterRef = useRef(0);
-
-  // Upload info
-  const [uploadInfo, setUploadInfo] = useState(null); // { frames, fps }
+  // Backend flow
+  const [userId, setUserId] = useState("demo");
+  const [flowStatus, setFlowStatus] = useState("idle"); // idle | presign | uploading | classifying | done | error
+  const [flowError, setFlowError] = useState("");
+  const [presign, setPresign] = useState(null); // {analysisId, s3KeyImage, uploadUrl, expiresIn}
+  const [classify, setClassify] = useState(null); // response from /api/pose/classify
+  const [confirmStatus, setConfirmStatus] = useState("idle"); // idle | confirming | done | error
+  const [confirmError, setConfirmError] = useState("");
+  const [userLabel, setUserLabel] = useState("");
+  const [datasetSampleId, setDatasetSampleId] = useState(null);
 
   const modelFullPath = useMemo(() => "/models/pose_landmarker_full.task", []);
   const modelLitePath = useMemo(() => "/models/pose_landmarker_lite.task", []);
 
-  function resetMetrics() {
-    metricsRef.current = {
-      frames: 0,
-      missFrames: 0,
-      confSum: 0,
-      confCount: 0,
-      jitterSum: 0,
-      jitterCount: 0,
-      lastPose: null,
-      lastUiUpdate: performance.now(),
-    };
-    setMetrics({
-      frames: 0,
-      missFrames: 0,
-      missRatePct: 0,
-      avgConf: 0,
-      avgJitter: 0,
-    });
-  }
+  const SUPPORTED_POSES = useMemo(
+    () => [
+      "full_planche",
+      "l_sit",
+      "front_lever",
+      "human_flag",
+      "handstand",
+      "elbow_lever",
+      "back_lever",
+    ],
+    []
+  );
 
-  function updateFps() {
-    fpsFramesRef.current += 1;
-    const now = performance.now();
-    const dt = now - lastFpsTsRef.current;
-    if (dt >= 1000) {
-      const computed = Math.round((fpsFramesRef.current * 1000) / dt);
-      setFps(computed);
-      fpsFramesRef.current = 0;
-      lastFpsTsRef.current = now;
+  // Init drawing ctx
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    drawingUtilsRef.current = new DrawingUtils(ctx);
+  }, []);
+
+  // Object URL from uploaded file
+  useEffect(() => {
+    if (!file) {
+      setImageUrl("");
+      setImageInfo({ w: 0, h: 0, name: "" });
+      setPreview([]);
+      setDerivedPreview([]);
+      setPoseLandmarks(null);
+      setStatus("idle");
+      setError("");
+      setFlowStatus("idle");
+      setFlowError("");
+      setPresign(null);
+      setClassify(null);
+      setConfirmStatus("idle");
+      setConfirmError("");
+      setUserLabel("");
+      setDatasetSampleId(null);
+      return;
     }
+
+    const url = URL.createObjectURL(file);
+    setImageUrl(url);
+    setImageInfo({ w: 0, h: 0, name: file.name || "photo" });
+    setStatus("ready");
+    setError("");
+    setFlowStatus("idle");
+    setFlowError("");
+    setPresign(null);
+    setClassify(null);
+    setConfirmStatus("idle");
+    setConfirmError("");
+    setUserLabel("");
+    setDatasetSampleId(null);
+
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  function resetLandmarker() {
+    try {
+      landmarkerRef.current?.close?.();
+    } catch {
+      // ignore
+    }
+    landmarkerRef.current = null;
+    setActiveModel("unknown");
   }
 
   async function initLandmarkerIfNeeded() {
     if (landmarkerRef.current) return landmarkerRef.current;
 
-    setStatus("loading");
-    setError("");
-
     const overrides = {
-      // runningMode est déjà "VIDEO" par défaut dans ta factory,
-      // mais on le laisse ici explicitement (webcam + upload utilisent detectForVideo).
-      runningMode: "VIDEO",
+      runningMode: "IMAGE", // IMPORTANT: photo only
       numPoses: 1,
       minPoseDetectionConfidence: 0.5,
       minPosePresenceConfidence: 0.5,
@@ -176,398 +181,289 @@ export default function PoseSandbox() {
 
     landmarkerRef.current = landmarker;
     setActiveModel(modelName);
-
-    // Init drawing ctx for webcam canvas
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      drawingUtilsRef.current = new DrawingUtils(ctx);
-    }
-
     return landmarker;
   }
 
-  async function safeDetectForVideo(landmarker, video, tsMs) {
-    if (landmarker.detectForVideo.length >= 3) {
-      return await new Promise((resolve) => {
-        landmarker.detectForVideo(video, tsMs, (result) => resolve(result));
-      });
-    }
-    return landmarker.detectForVideo(video, tsMs);
-  }
+  async function analyzeCurrentImage() {
+    try {
+      if (!imageUrl) return;
 
-  function updateMetrics(pose0) {
-    const m = metricsRef.current;
-    m.frames += 1;
+      setStatus("loading");
+      setError("");
+      setPoseLandmarks(null);
+      setPreview([]);
+      setDerivedPreview([]);
 
-    if (!pose0) {
-      m.missFrames += 1;
-    } else {
-      // confidence: moyenne sur 8 points "core"
-      for (const kp of KEYPOINTS.slice(0, 8)) {
-        const lm = pose0[kp.idx] ?? {};
-        m.confSum += confFrom(lm);
-        m.confCount += 1;
+      const canvas = canvasRef.current;
+      const drawingUtils = drawingUtilsRef.current;
+      if (!canvas || !drawingUtils) throw new Error("canvas non prêt");
+
+      const img = await loadImageFromUrl(imageUrl);
+      const landmarker = await initLandmarkerIfNeeded();
+
+      // Resize canvas to image size
+      const w = img.naturalWidth || img.width || 0;
+      const h = img.naturalHeight || img.height || 0;
+      if (!w || !h) throw new Error("Image invalide (dimensions 0)");
+
+      canvas.width = w;
+      canvas.height = h;
+      setImageInfo((prev) => ({ ...prev, w, h }));
+
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, w, h);
+
+      // Draw image
+      ctx.drawImage(img, 0, 0, w, h);
+
+      // Detect
+      const result = await safeDetectForImage(landmarker, img);
+      const pose0 = result?.landmarks?.[0] ?? null;
+
+      if (!pose0) {
+        setPreview([]);
+        setDerivedPreview([]);
+        setPoseLandmarks(null);
+        setStatus("done");
+        return;
       }
 
-      // jitter: variation frame-to-frame sur les 8 points core
-      if (m.lastPose) {
-        for (const kp of KEYPOINTS.slice(0, 8)) {
-          const a = pose0[kp.idx];
-          const b = m.lastPose[kp.idx];
-          if (a && b) {
-            m.jitterSum += dist2D(a, b);
-            m.jitterCount += 1;
-          }
-        }
-      }
-      m.lastPose = pose0;
-    }
+      setPoseLandmarks(pose0);
 
-    const now = performance.now();
-    if (now - m.lastUiUpdate >= 1000) {
-      const missRatePct = m.frames > 0 ? (100 * m.missFrames) / m.frames : 0;
-      const avgConf = m.confCount > 0 ? m.confSum / m.confCount : 0;
-      const avgJitter = m.jitterCount > 0 ? m.jitterSum / m.jitterCount : 0;
+      // Draw landmarks & connectors
+      drawPose(drawingUtils, pose0);
 
-      setMetrics({
-        frames: m.frames,
-        missFrames: m.missFrames,
-        missRatePct: Math.round(missRatePct * 10) / 10,
-        avgConf: round4(avgConf),
-        avgJitter: round4(avgJitter),
-      });
-
-      m.lastUiUpdate = now;
-    }
-  }
-
-  function drawExtraPoints(ctx, extraOrder, w, h) {
-    // Dessine des petits points pour les virtual landmarks (neutre)
-    ctx.save();
-    for (const item of extraOrder) {
-      const lm = item.lm;
-      const x = (lm.x ?? 0) * w;
-      const y = (lm.y ?? 0) * h;
-      ctx.beginPath();
-      ctx.arc(x, y, 4, 0, 2 * Math.PI);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  async function loop() {
-    const landmarker = landmarkerRef.current;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const drawingUtils = drawingUtilsRef.current;
-
-    if (!landmarker || !video || !canvas || !drawingUtils || video.readyState < 2) {
-      rafRef.current = requestAnimationFrame(loop);
-      return;
-    }
-
-    const ctx = canvas.getContext("2d");
-
-    // Webcam: on utilise performance.now() comme timestamp (ok pour VIDEO runningMode)
-    const tsMs = performance.now();
-    const result = await safeDetectForVideo(landmarker, video, tsMs);
-
-    ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const pose0 = result?.landmarks?.[0] ?? null;
-
-    if (pose0) {
-      drawingUtils.drawLandmarks(pose0, { radius: 2 });
-      drawingUtils.drawConnectors(pose0, PoseLandmarker.POSE_CONNECTIONS);
-
+      // Derived points
       const augmented = augmentPose(pose0);
-      drawExtraPoints(ctx, augmented.extraOrder, canvas.width, canvas.height);
+      drawExtraPoints(ctx, augmented.extraOrder, w, h);
 
-      // UI preview: 1 update / 6 frames
-      frameCounterRef.current += 1;
-      if (frameCounterRef.current % 6 === 0) {
-        const rows = KEYPOINTS.map(({ name, idx }) => {
-          const lm = pose0[idx] ?? {};
-          return {
-            name,
-            x: round4(lm.x ?? 0),
-            y: round4(lm.y ?? 0),
-            z: round4(lm.z ?? 0),
-            c: round4(confFrom(lm)),
-          };
-        });
-        setPreview(rows);
-
-        const drows = augmented.extraOrder.map(({ name, lm }) => ({
+      // Table previews
+      const rows = KEYPOINTS.map(({ name, idx }) => {
+        const lm = pose0[idx] ?? {};
+        return {
           name,
           x: round4(lm.x ?? 0),
           y: round4(lm.y ?? 0),
           z: round4(lm.z ?? 0),
-          c: round4(lm.c ?? 0),
-        }));
-        setDerivedPreview(drows);
-      }
-    }
-
-    ctx.restore();
-
-    updateMetrics(pose0);
-    updateFps();
-    rafRef.current = requestAnimationFrame(loop);
-  }
-
-  async function startWebcam() {
-    try {
-      await stopWebcam();
-
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720 },
-        audio: false,
+          c: round4(confFrom(lm)),
+        };
       });
+      setPreview(rows);
 
-      streamRef.current = stream;
-      video.srcObject = stream;
-      video.playsInline = true;
+      const drows = augmented.extraOrder.map(({ name, lm }) => ({
+        name,
+        x: round4(lm.x ?? 0),
+        y: round4(lm.y ?? 0),
+        z: round4(lm.z ?? 0),
+        c: round4(lm.c ?? 0),
+      }));
+      setDerivedPreview(drows);
 
-      await video.play();
-
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-
-      resetMetrics();
-      await initLandmarkerIfNeeded();
-
-      lastFpsTsRef.current = performance.now();
-      fpsFramesRef.current = 0;
-      setFps(0);
-
-      setPreview([]);
-      setDerivedPreview([]);
-      setUploadInfo(null);
-
-      setStatus("running");
-      loop();
+      setStatus("done");
     } catch (e) {
       setStatus("error");
       setError(e?.message ?? String(e));
     }
   }
 
-  async function stopWebcam() {
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-
-    if (streamRef.current) {
-      for (const track of streamRef.current.getTracks()) track.stop();
-      streamRef.current = null;
-    }
-
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    const video = videoRef.current;
-    if (video) {
-      video.pause();
-      video.srcObject = null;
-    }
-
-    setPreview([]);
-    setDerivedPreview([]);
-    setStatus((s) => (s === "running" || s === "loading" ? "stopped" : s));
-  }
-
-  function resetLandmarker() {
+  async function runS3AndClassify() {
     try {
-      landmarkerRef.current?.close?.();
-    } catch {
-      // ignore
+      if (!file) throw new Error("Aucune image sélectionnée");
+      if (!userId?.trim()) throw new Error("userId requis");
+      if (!poseLandmarks || poseLandmarks.length !== 33) {
+        throw new Error("Landmarks manquants: détecte une pose sur l'image d'abord");
+      }
+
+      setFlowStatus("presign");
+      setFlowError("");
+      setPresign(null);
+      setClassify(null);
+      setConfirmStatus("idle");
+      setConfirmError("");
+      setUserLabel("");
+      setDatasetSampleId(null);
+
+      const contentType = file.type || "image/jpeg";
+
+      const presignRes = await fetchJson("/api/uploads/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userId.trim(), contentType }),
+      });
+
+      setPresign(presignRes);
+
+      setFlowStatus("uploading");
+      const putRes = await fetch(presignRes.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: file,
+      });
+      if (!putRes.ok) {
+        const t = await putRes.text().catch(() => "");
+        throw new Error(t || `S3 upload failed (HTTP ${putRes.status})`);
+      }
+
+      setFlowStatus("classifying");
+      const meta = {
+        source: "frontend",
+        fileName: imageInfo.name || "",
+        imageW: String(imageInfo.w || ""),
+        imageH: String(imageInfo.h || ""),
+        activeModel: String(activeModel || "unknown"),
+      };
+
+      const classifyRes = await fetchJson("/api/pose/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          analysisId: presignRes.analysisId,
+          userId: userId.trim(),
+          s3KeyImage: presignRes.s3KeyImage,
+          landmarks: mapLandmarksForApi(poseLandmarks),
+          meta,
+        }),
+      });
+
+      setClassify(classifyRes);
+      setUserLabel(classifyRes.pose || "");
+      setFlowStatus("done");
+    } catch (e) {
+      setFlowStatus("error");
+      setFlowError(e?.message ?? String(e));
     }
-    landmarkerRef.current = null;
-    setActiveModel("unknown");
   }
 
-  // Cleanup unmount
+  async function confirmLabel() {
+    try {
+      const analysisId = presign?.analysisId || classify?.analysisId;
+      if (!analysisId) throw new Error("analysisId manquant (lance d'abord classify)");
+      if (!userId?.trim()) throw new Error("userId requis");
+      if (!userLabel?.trim()) throw new Error("userLabel requis");
+
+      setConfirmStatus("confirming");
+      setConfirmError("");
+      setDatasetSampleId(null);
+
+      const out = await fetchJson("/api/pose/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          analysisId,
+          userId: userId.trim(),
+          userLabel: userLabel.trim(),
+        }),
+      });
+
+      setDatasetSampleId(out.datasetSampleId || null);
+      setConfirmStatus("done");
+    } catch (e) {
+      setConfirmStatus("error");
+      setConfirmError(e?.message ?? String(e));
+    }
+  }
+
+  // Auto-analyze when a new image is selected
+  useEffect(() => {
+    if (!imageUrl) return;
+    analyzeCurrentImage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageUrl]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      stopWebcam();
       resetLandmarker();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When switching to upload mode: ensure webcam is stopped
-  useEffect(() => {
-    if (inputMode === "upload") {
-      stopWebcam();
-      setStatus("idle");
-      setFps(0);
-      setPreview([]);
-      setDerivedPreview([]);
-      resetMetrics();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputMode]);
-
-  const runningWebcam = status === "running" || status === "loading";
-  const canChangeMode = !runningWebcam;
+  const canAnalyze = !!imageUrl && status !== "loading";
+  const canRunFlow = !!file && !!imageUrl && status !== "loading" && flowStatus !== "uploading" && flowStatus !== "classifying" && flowStatus !== "presign";
+  const fileDisabled = status === "loading" || flowStatus === "uploading" || flowStatus === "classifying" || flowStatus === "presign";
 
   return (
     <section className="card">
-      <div className="controls">
-        <div className="buttons">
-          <button
-            className="btn"
-            onClick={startWebcam}
-            disabled={runningWebcam || inputMode !== "webcam"}
-            title={inputMode !== "webcam" ? "Passe en mode webcam pour démarrer" : ""}
-          >
-            {status === "loading" ? "Loading..." : "Start webcam"}
-          </button>
+      <PoseControls
+        status={status}
+        flowStatus={flowStatus}
+        imageUrl={imageUrl}
+        imageInfo={imageInfo}
+        activeModel={activeModel}
+        modelMode={modelMode}
+        setModelMode={setModelMode}
+        resetLandmarker={resetLandmarker}
+        analyzeCurrentImage={analyzeCurrentImage}
+        canAnalyze={canAnalyze}
+        fileDisabled={fileDisabled}
+        onPickFile={(e) => setFile(e.target.files?.[0] ?? null)}
+        onClear={() => {
+          setFile(null);
+          setImageUrl("");
+          setPreview([]);
+          setDerivedPreview([]);
+          setPoseLandmarks(null);
+          setError("");
+          setStatus("idle");
+          setFlowStatus("idle");
+          setFlowError("");
+          setPresign(null);
+          setClassify(null);
+          setConfirmStatus("idle");
+          setConfirmError("");
+          setUserLabel("");
+          setDatasetSampleId(null);
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
+        }}
+        userId={userId}
+        setUserId={setUserId}
+        runS3AndClassify={runS3AndClassify}
+        canRunFlow={canRunFlow}
+        hasPoseLandmarks={!!poseLandmarks}
+      />
 
-          <button className="btn" onClick={stopWebcam} disabled={!runningWebcam}>
-            Stop
-          </button>
+      {error ? <p className="error">Erreur: {error}</p> : null}
 
-          <label
-            className="muted"
-            style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: 10 }}
-          >
-            Input:
-            <select
-              value={inputMode}
-              onChange={(e) => setInputMode(e.target.value)}
-              disabled={!canChangeMode}
-            >
-              <option value="webcam">webcam</option>
-              <option value="upload">upload video</option>
-            </select>
-          </label>
-
-          <label className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            Model mode:
-            <select
-              value={modelMode}
-              onChange={(e) => {
-                setModelMode(e.target.value);
-                resetLandmarker();
-                resetMetrics();
-                setError("");
-              }}
-              disabled={runningWebcam}
-            >
-              <option value="auto">auto (full → lite)</option>
-              <option value="full">full only</option>
-              <option value="lite">lite only</option>
-            </select>
-          </label>
+      <div className="stage">
+        <div className="videoWrap">
+          <canvas ref={canvasRef} className="canvas" />
         </div>
 
-        <div className="meta muted">
-          <span>Status: {status}</span>
-          <span>FPS: {inputMode === "webcam" ? fps : "-"}</span>
-          <span>Active model: {activeModel}</span>
+        <div className="panel">
+          <PoseResultPanel
+            classify={classify}
+            flowStatus={flowStatus}
+            flowError={flowError}
+            userLabel={userLabel}
+            setUserLabel={setUserLabel}
+            supportedPoses={SUPPORTED_POSES}
+            confirmLabel={confirmLabel}
+            confirmStatus={confirmStatus}
+            confirmError={confirmError}
+            datasetSampleId={datasetSampleId}
+          />
+
+          <PoseKeypointsPanel
+            title="Points natifs utiles (extrait)"
+            emptyText={imageUrl ? "Aucune pose détectée sur cette photo." : "Upload une photo pour voir les points."}
+            rows={preview}
+          />
+
+          <PoseKeypointsPanel
+            title="Points dérivés (virtual landmarks)"
+            emptyText="Ils apparaîtront dès qu’une pose est détectée."
+            rows={derivedPreview}
+          />
+
+          <p className="muted" style={{ marginTop: 10 }}>
+            Important: ces points dérivés peuvent aussi être recalculés côté scoring (Python) à partir des 33 natifs.
+          </p>
         </div>
-
-        {inputMode === "webcam" ? (
-          <div className="meta muted">
-            <span>Frames: {metrics.frames}</span>
-            <span>
-              Miss: {metrics.missFrames} ({metrics.missRatePct}%)
-            </span>
-            <span>Avg conf: {metrics.avgConf}</span>
-            <span>Avg jitter: {metrics.avgJitter}</span>
-          </div>
-        ) : (
-          <div className="meta muted">
-            <span>Upload: {uploadInfo ? `${uploadInfo.frames} frames @ ${uploadInfo.fps} fps` : "-"}</span>
-          </div>
-        )}
-
-        {error ? <p className="error">Erreur: {error}</p> : null}
       </div>
-
-      {inputMode === "webcam" ? (
-        <div className="stage">
-          <div className="videoWrap">
-            <video ref={videoRef} className="mirror video" />
-            <canvas ref={canvasRef} className="mirror canvas" />
-          </div>
-
-          <div className="panel">
-            <h3>Points natifs utiles (extrait)</h3>
-            {preview.length === 0 ? (
-              <p className="muted">Démarre la webcam.</p>
-            ) : (
-              <ul className="list">
-                {preview.map((r) => (
-                  <li key={r.name} className="row">
-                    <span className="mono">{r.name}</span>
-                    <span className="mono">x={r.x}</span>
-                    <span className="mono">y={r.y}</span>
-                    <span className="mono">z={r.z}</span>
-                    <span className="mono">c={r.c}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <h3 style={{ marginTop: 14 }}>Points dérivés (virtual landmarks)</h3>
-            {derivedPreview.length === 0 ? (
-              <p className="muted">Ils apparaîtront dès qu’une pose est détectée.</p>
-            ) : (
-              <ul className="list">
-                {derivedPreview.map((r) => (
-                  <li key={r.name} className="row">
-                    <span className="mono">{r.name}</span>
-                    <span className="mono">x={r.x}</span>
-                    <span className="mono">y={r.y}</span>
-                    <span className="mono">z={r.z}</span>
-                    <span className="mono">c={r.c}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <p className="muted" style={{ marginTop: 10 }}>
-              Important: ces points dérivés seront recalculés côté scoring (Python) à partir des 33 natifs pour garder la logique unique.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <VideoUploadAnalyzer
-          defaultFps={15}
-          getLandmarker={async () => {
-            // utilise le même landmarker / même logique full/lite/auto
-            const lm = await initLandmarkerIfNeeded();
-            return lm;
-          }}
-          onError={(msg) => {
-            setError(msg);
-            setStatus("error");
-          }}
-          onSeriesReady={(series) => {
-            setError("");
-            setStatus("stopped");
-            setUploadInfo({ frames: series.length, fps: 15 });
-
-            // Exemple: tu peux POST vers /api/analyze ici (MVP)
-            // await fetch("/api/analyze", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ exercise:"squat", fps:15, series }) })
-
-            // eslint-disable-next-line no-console
-            console.log("UPLOAD SERIES READY", { frames: series.length, sample: series.slice(0, 2) });
-          }}
-        />
-      )}
     </section>
   );
 }

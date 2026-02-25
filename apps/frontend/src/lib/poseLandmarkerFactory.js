@@ -1,3 +1,4 @@
+// apps/frontend/src/lib/poseLandmarkerFactory.js
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
 const VISION_WASM_BASE =
@@ -18,8 +19,8 @@ function buildOptions(modelAssetPath, overrides = {}) {
       modelAssetPath,
       // delegate: "GPU", // optionnel
     },
-    // IMPORTANT: VIDEO marche très bien pour webcam + upload (on fournit tsMs)
-    runningMode: "VIDEO",
+    // IMPORTANT: PHOTO ONLY => IMAGE
+    runningMode: "IMAGE",
     numPoses: 1,
     minPoseDetectionConfidence: 0.5,
     minPosePresenceConfidence: 0.5,
