@@ -7,7 +7,7 @@ import time
 import uuid
 from typing import Dict, List, Optional
 
-from .pose_rules import P
+from .pose_features import P
 
 
 def _ensure_parent_dir(path: str) -> None:

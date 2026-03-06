@@ -13,6 +13,8 @@ services:
     container_name: scoring
     environment:
       - DATASET_CSV_PATH=/app/data/datasets/pose_samples.csv
+      - POSE_DEBUG=1
+      - LOG_LEVEL=INFO
     volumes:
       - ../data/datasets:/app/data/datasets
     ports:

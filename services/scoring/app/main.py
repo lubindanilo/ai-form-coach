@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from .pose_rules import P, classify_pose, POSES
+from .pose_features import P
+from .pose_rules import classify_pose, POSES
 from .dataset import append_pose_sample_to_csv
+
+import logging
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 app = FastAPI()
 
@@ -50,10 +54,13 @@ def pose_classify(req: PoseClassifyRequest) -> PoseClassifyResponse:
     sample_id = None
     if req.save_sample:
         csv_path = os.getenv("DATASET_CSV_PATH", "data/datasets/pose_samples.csv")
-        # store a few extra debug features too (optional)
-        extra_features = {
-            "best_conf": conf,
-        }
+
+        extra_features = {"best_conf": conf}
+
+        # (optionnel mais utile) : si user_label est fourni, on peut vérifier qu’il est valide
+        if req.user_label and req.user_label not in POSES:
+            warnings.append(f"user_label '{req.user_label}' not in supported poses: {POSES}")
+
         try:
             sample_id = append_pose_sample_to_csv(
                 csv_path=csv_path,
@@ -64,9 +71,7 @@ def pose_classify(req: PoseClassifyRequest) -> PoseClassifyResponse:
                 meta=req.meta,
                 extra_features=extra_features,
             )
-        except Exception as e:  # pragma: no cover - defensive logging
-            # Failing to write the CSV should not break the API contract.
-            # We keep returning a valid response but surface a warning.
+        except Exception as e:  # pragma: no cover
             warnings.append(f"Failed to append sample to CSV: {e}")
 
     return PoseClassifyResponse(
