@@ -1,4 +1,4 @@
-# services/scoring/app/main.py
+# services/detection/app/main.py
 from __future__ import annotations
 
 import os

@@ -1,4 +1,4 @@
-# services/scoring/app/pose_rules.py
+# services/detection/app/pose_rules.py
 from __future__ import annotations
 
 import json

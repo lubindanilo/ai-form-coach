@@ -9,8 +9,8 @@ services:
 
   scoring:
     build:
-      context: ../services/scoring
-    container_name: scoring
+      context: ../services/detection
+    container_name: detection
     environment:
       - DATASET_CSV_PATH=/app/data/datasets/pose_samples.csv
       - POSE_DEBUG=1
