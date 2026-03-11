@@ -73,6 +73,7 @@ export default function PoseSandbox() {
   const [confirmError, setConfirmError] = useState("");
   const [userLabel, setUserLabel] = useState("");
   const [datasetSampleId, setDatasetSampleId] = useState(null);
+  const [techniqueScore, setTechniqueScore] = useState(null);
 
   const modelFullPath = useMemo(() => "/models/pose_landmarker_full.task", []);
   const modelLitePath = useMemo(() => "/models/pose_landmarker_lite.task", []);
@@ -116,6 +117,7 @@ export default function PoseSandbox() {
       setConfirmError("");
       setUserLabel("");
       setDatasetSampleId(null);
+      setTechniqueScore(null);
       return;
     }
 
@@ -132,6 +134,7 @@ export default function PoseSandbox() {
     setConfirmError("");
     setUserLabel("");
     setDatasetSampleId(null);
+    setTechniqueScore(null);
 
     return () => URL.revokeObjectURL(url);
   }, [file]);
@@ -344,6 +347,7 @@ export default function PoseSandbox() {
       setConfirmStatus("confirming");
       setConfirmError("");
       setDatasetSampleId(null);
+      setTechniqueScore(null);
 
       const out = await fetchJson("/api/pose/confirm", {
         method: "POST",
@@ -356,6 +360,7 @@ export default function PoseSandbox() {
       });
 
       setDatasetSampleId(out.datasetSampleId || null);
+      setTechniqueScore(out.techniqueScore || null);
       setConfirmStatus("done");
     } catch (e) {
       setConfirmStatus("error");
@@ -445,6 +450,7 @@ export default function PoseSandbox() {
             confirmStatus={confirmStatus}
             confirmError={confirmError}
             datasetSampleId={datasetSampleId}
+            techniqueScore={techniqueScore}
           />
 
           <PoseKeypointsPanel

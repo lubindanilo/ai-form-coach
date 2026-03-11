@@ -1,7 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const Analysis = require("../models/Analysis");
-const { classifyPose } = require("../scoring");
+const { classifyPose, scoreTechnique } = require("../scoring");
 const { putJson } = require("../s3");
 
 const router = express.Router();
@@ -113,7 +113,23 @@ router.post("/confirm", async (req, res) => {
 
     await putJson({ bucket: process.env.S3_BUCKET, key: s3KeyResult, obj: updatedResultObj });
 
-    res.json({ analysisId, confirmedLabel: userLabel, datasetSampleId: scoring.sample_id || null });
+    let techniqueScore = null;
+    try {
+      techniqueScore = await scoreTechnique({
+        figure: userLabel,
+        landmarks: analysis.landmarks
+      });
+    } catch (scoreErr) {
+      console.error("Error while calling scoring service in /api/pose/confirm:", scoreErr);
+      techniqueScore = null;
+    }
+
+    res.json({
+      analysisId,
+      confirmedLabel: userLabel,
+      datasetSampleId: scoring.sample_id || null,
+      techniqueScore
+    });
   } catch (err) {
     // Surface the error message to the client to ease debugging
     console.error("Error in /api/pose/confirm:", err);

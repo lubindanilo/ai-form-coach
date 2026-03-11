@@ -12,6 +12,7 @@ export default function PoseResultPanel({
   confirmStatus,
   confirmError,
   datasetSampleId,
+  techniqueScore,
 }) {
   return (
     <>
@@ -99,9 +100,19 @@ export default function PoseResultPanel({
 
             {confirmError ? <p className="error">Confirm erreur: {confirmError}</p> : null}
             {confirmStatus === "done" ? (
-              <p className="muted">
-                Confirm OK. datasetSampleId: <span className="mono">{datasetSampleId || "-"}</span>
-              </p>
+              <>
+                <p className="muted">
+                  Confirm OK. datasetSampleId: <span className="mono">{datasetSampleId || "-"}</span>
+                </p>
+                {techniqueScore ? (
+                  <details>
+                    <summary className="muted">Technique score (Python)</summary>
+                    <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0, marginTop: 8 }}>
+                      {JSON.stringify(techniqueScore, null, 2)}
+                    </pre>
+                  </details>
+                ) : null}
+              </>
             ) : null}
           </div>
         </div>

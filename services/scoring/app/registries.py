@@ -24,6 +24,7 @@ def normalize_figure_name(name: str) -> str:
     cleaned = name.strip().lower().replace(" ", "_").replace("-", "_")
     aliases = {
         "l_sit": "lsit",
+        "full_planche": "planche",
     }
     return aliases.get(cleaned, cleaned)
 
