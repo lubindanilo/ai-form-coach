@@ -7,7 +7,7 @@ services:
     volumes:
       - mongo_data:/data/db
 
-  scoring:
+  detection:
     build:
       context: ../services/detection
     container_name: detection
@@ -20,12 +20,20 @@ services:
     ports:
       - "8000:8000"
 
+  scoring:
+    build:
+      context: ../services/scoring
+    container_name: scoring
+    ports:
+      - "8001:8000"
+
   api:
     build:
       context: ../apps/api
     container_name: api
     depends_on:
       - mongo
+      - detection
       - scoring
     env_file:
       - ../.env

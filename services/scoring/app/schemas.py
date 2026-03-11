@@ -34,19 +34,3 @@ class TechniqueScoreResponse(BaseModel):
     scores: dict[str, float]
     confidence: dict[str, float]
     dimensions: dict[str, DimensionScore]
-
-
-class PoseClassifyRequest(BaseModel):
-    landmarks: list[Landmark] = Field(..., min_length=33, max_length=33)
-    save_sample: bool = False
-    user_label: str | None = None
-    meta: dict[str, str] | None = None
-    include_debug: bool = True
-
-
-class PoseClassifyResponse(BaseModel):
-    pose: str
-    confidence: float
-    scores: dict[str, float] | None = None
-    warnings: list[str] = []
-    sample_id: str | None = None
