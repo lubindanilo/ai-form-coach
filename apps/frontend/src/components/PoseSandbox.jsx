@@ -455,6 +455,9 @@ export default function PoseSandbox() {
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
                 <span className="uploadZoneText">Cliquez pour uploader votre image</span>
+                <span className="uploadZoneHint">
+                  Choisissez une photo prise bien de profil, avec le corps entier visible.
+                </span>
               </span>
             ) : null}
             <canvas ref={canvasRef} className="canvas" style={{ visibility: imageUrl ? "visible" : "hidden" }} />

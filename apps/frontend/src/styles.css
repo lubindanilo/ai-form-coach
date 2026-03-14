@@ -121,6 +121,14 @@ body {
   text-align: center;
 }
 
+.uploadZoneHint {
+  font-size: 0.85rem;
+  color: #52525b;
+  text-align: center;
+  max-width: 260px;
+  line-height: 1.35;
+}
+
 .video,
 .canvas {
   position: absolute;
