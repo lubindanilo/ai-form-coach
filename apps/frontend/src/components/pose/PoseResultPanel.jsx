@@ -1,9 +1,11 @@
 import React from "react";
 import { round4 } from "../../lib/poseSandboxUtils.js";
 
+/** Afficher Confidence, analysisId, s3Key*, Scores debug (debug). */
+const SHOW_RESULT_DEBUG = false;
+
 export default function PoseResultPanel({
   classify,
-  flowStatus,
   flowError,
   userLabel,
   setUserLabel,
@@ -11,57 +13,47 @@ export default function PoseResultPanel({
   confirmLabel,
   confirmStatus,
   confirmError,
-  datasetSampleId,
   techniqueScore,
 }) {
   return (
     <>
-      <h3>Résultat scoring (API)</h3>
-
       {flowError ? <p className="error">Flow erreur: {flowError}</p> : null}
 
-      {!classify ? (
-        <p className="muted">
-          Clique sur <span className="mono">S3 + Classify</span> pour uploader l’image sur S3 et appeler le scoring.
-        </p>
-      ) : (
+      {!classify ? null : (
         <div style={{ display: "grid", gap: 10 }}>
           <div className="muted">
             <div>
-              Pose: <span className="mono">{classify.pose}</span>
+              Figure détectée: <span className="mono">{classify.pose}</span>
             </div>
-            <div>
-              Confidence: <span className="mono">{round4(classify.confidence)}</span>
-            </div>
-            <div>
-              analysisId: <span className="mono">{classify.analysisId}</span>
-            </div>
-            <div>
-              s3KeyImage: <span className="mono">{classify.s3KeyImage}</span>
-            </div>
-            <div>
-              s3KeyResult: <span className="mono">{classify.s3KeyResult}</span>
-            </div>
+            {SHOW_RESULT_DEBUG ? (
+              <>
+                <div>
+                  Confidence: <span className="mono">{round4(classify.confidence)}</span>
+                </div>
+                <div>
+                  analysisId: <span className="mono">{classify.analysisId}</span>
+                </div>
+                <div>
+                  s3KeyImage: <span className="mono">{classify.s3KeyImage}</span>
+                </div>
+                <div>
+                  s3KeyResult: <span className="mono">{classify.s3KeyResult}</span>
+                </div>
+              </>
+            ) : null}
           </div>
 
           {Array.isArray(classify.warnings) && classify.warnings.length > 0 ? (
-            <div>
-              <div className="muted" style={{ marginBottom: 6 }}>
-                Warnings:
-              </div>
-              <ul className="list">
-                {classify.warnings.map((w, i) => (
-                  <li key={`${w}-${i}`} className="row" style={{ gridTemplateColumns: "1fr" }}>
-                    <span className="mono">{w}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p className="muted">Warnings: aucune</p>
-          )}
+            <ul className="list">
+              {classify.warnings.map((w, i) => (
+                <li key={`${w}-${i}`} className="row" style={{ gridTemplateColumns: "1fr" }}>
+                  <span className="mono">{w}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
-          {classify.scores ? (
+          {SHOW_RESULT_DEBUG && classify.scores ? (
             <details>
               <summary className="muted">Scores debug</summary>
               <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0, marginTop: 8 }}>
@@ -72,7 +64,6 @@ export default function PoseResultPanel({
 
           <div style={{ display: "grid", gap: 8 }}>
             <label className="muted" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              userLabel:
               <select
                 value={userLabel}
                 onChange={(e) => setUserLabel(e.target.value)}
@@ -85,7 +76,7 @@ export default function PoseResultPanel({
                   color: "#f2f2f2",
                 }}
               >
-                <option value="">-- choisir --</option>
+                <option value="">Modifier la figure détectée</option>
                 {supportedPoses.map((p) => (
                   <option key={p} value={p}>
                     {p}
@@ -95,18 +86,15 @@ export default function PoseResultPanel({
             </label>
 
             <button className="btn" onClick={confirmLabel} disabled={!userLabel || confirmStatus === "confirming"}>
-              {confirmStatus === "confirming" ? "Confirmation..." : "✅ Confirmer (log dataset)"}
+              {confirmStatus === "confirming" ? "Confirmation..." : "Confirmer la figure et lancer l'analyse technique"}
             </button>
 
             {confirmError ? <p className="error">Confirm erreur: {confirmError}</p> : null}
             {confirmStatus === "done" ? (
               <>
-                <p className="muted">
-                  Confirm OK. datasetSampleId: <span className="mono">{datasetSampleId || "-"}</span>
-                </p>
                 {techniqueScore ? (
                   <details>
-                    <summary className="muted">Technique score (Python)</summary>
+                    <summary className="muted">Résultat d'analyse</summary>
                     <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0, marginTop: 8 }}>
                       {JSON.stringify(techniqueScore, null, 2)}
                     </pre>
@@ -117,10 +105,6 @@ export default function PoseResultPanel({
           </div>
         </div>
       )}
-
-      <p className="muted" style={{ marginTop: 8 }}>
-        Flow status: <span className="mono">{flowStatus}</span>
-      </p>
     </>
   );
 }

@@ -5,21 +5,15 @@ export default function App() {
   return (
     <div className="page">
       <header className="header">
-        <h1>MediaPipe Pose — Test local</h1>
+        <h1>Street Workout AI</h1>
         <p className="muted">
-          Webcam → PoseLandmarker (browser) → overlay squelette + aperçu des landmarks.
+          Téléchargez une photo pour analyser votre figure et recevoir des conseils pour l'améliorer.
         </p>
       </header>
 
       <main className="content">
         <PoseSandbox />
       </main>
-
-      <footer className="footer muted">
-        <p>
-          Note: MediaPipe télécharge WASM + modèle au premier run (petit délai initial).
-        </p>
-      </footer>
     </div>
   );
 }

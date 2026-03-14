@@ -34,6 +34,12 @@ const KEYPOINTS = [
   { name: "RIGHT_FOOT_INDEX", idx: POSE_IDX.RIGHT_FOOT_INDEX },
 ];
 
+/** Afficher les panneaux "Points natifs" et "Points dérivés" (debug). */
+const SHOW_KEYPOINT_PANELS = false;
+
+/** Dessiner les points et le squelette sur l'image (debug). */
+const SHOW_POSE_OVERLAY = false;
+
 export default function PoseSandbox() {
   // Canvas
   const canvasRef = useRef(null);
@@ -216,12 +222,12 @@ export default function PoseSandbox() {
 
       setPoseLandmarks(pose0);
 
-      // Draw landmarks & connectors
-      drawPose(drawingUtils, pose0);
-
-      // Derived points
       const augmented = augmentPose(pose0);
-      drawExtraPoints(ctx, augmented.extraOrder, w, h);
+
+      if (SHOW_POSE_OVERLAY) {
+        drawPose(drawingUtils, pose0);
+        drawExtraPoints(ctx, augmented.extraOrder, w, h);
+      }
 
       // Table previews
       const rows = KEYPOINTS.map(({ name, idx }) => {
@@ -358,6 +364,20 @@ export default function PoseSandbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrl]);
 
+  // Auto-run S3 + Classify when pose is detected (no need to click "Détecter la figure")
+  useEffect(() => {
+    if (
+      !file ||
+      !imageUrl ||
+      !poseLandmarks ||
+      status !== "done" ||
+      flowStatus !== "idle"
+    )
+      return;
+    runS3AndClassify();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, imageUrl, poseLandmarks, status, flowStatus]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -366,8 +386,6 @@ export default function PoseSandbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const canAnalyze = !!imageUrl && status !== "loading";
-  const canRunFlow = !!file && !!imageUrl && status !== "loading" && flowStatus !== "uploading" && flowStatus !== "classifying" && flowStatus !== "presign";
   const fileDisabled = status === "loading" || flowStatus === "uploading" || flowStatus === "classifying" || flowStatus === "presign";
 
   return (
@@ -377,10 +395,7 @@ export default function PoseSandbox() {
         flowStatus={flowStatus}
         imageInfo={imageInfo}
         activeModel={activeModel}
-        analyzeCurrentImage={analyzeCurrentImage}
-        canAnalyze={canAnalyze}
         fileDisabled={fileDisabled}
-        onPickFile={(e) => setFile(e.target.files?.[0] ?? null)}
         onClear={() => {
           setFile(null);
           setImageUrl("");
@@ -403,24 +418,52 @@ export default function PoseSandbox() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
           }
         }}
-        userId={userId}
-        setUserId={setUserId}
-        runS3AndClassify={runS3AndClassify}
-        canRunFlow={canRunFlow}
-        hasPoseLandmarks={!!poseLandmarks}
       />
 
       {error ? <p className="error">Erreur: {error}</p> : null}
 
       <div className="stage">
         <div className="videoWrap">
-          <canvas ref={canvasRef} className="canvas" />
+          <label
+            className="uploadZone"
+            style={{
+              cursor: fileDisabled ? "not-allowed" : "pointer",
+              opacity: fileDisabled ? 0.6 : 1,
+            }}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              disabled={fileDisabled}
+              style={{ position: "absolute", width: 0, height: 0, opacity: 0, overflow: "hidden" }}
+            />
+            {!imageUrl ? (
+              <span className="uploadZonePlaceholder">
+                <svg
+                  className="uploadZoneIcon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span className="uploadZoneText">Cliquez pour uploader votre image</span>
+              </span>
+            ) : null}
+            <canvas ref={canvasRef} className="canvas" style={{ visibility: imageUrl ? "visible" : "hidden" }} />
+          </label>
         </div>
 
         <div className="panel">
           <PoseResultPanel
             classify={classify}
-            flowStatus={flowStatus}
             flowError={flowError}
             userLabel={userLabel}
             setUserLabel={setUserLabel}
@@ -428,25 +471,28 @@ export default function PoseSandbox() {
             confirmLabel={confirmLabel}
             confirmStatus={confirmStatus}
             confirmError={confirmError}
-            datasetSampleId={datasetSampleId}
             techniqueScore={techniqueScore}
           />
 
-          <PoseKeypointsPanel
-            title="Points natifs utiles (extrait)"
-            emptyText={imageUrl ? "Aucune pose détectée sur cette photo." : "Upload une photo pour voir les points."}
-            rows={preview}
-          />
+          {SHOW_KEYPOINT_PANELS ? (
+            <>
+              <PoseKeypointsPanel
+                title="Points natifs utiles (extrait)"
+                emptyText={imageUrl ? "Aucune pose détectée sur cette photo." : "Upload une photo pour voir les points."}
+                rows={preview}
+              />
 
-          <PoseKeypointsPanel
-            title="Points dérivés (virtual landmarks)"
-            emptyText="Ils apparaîtront dès qu’une pose est détectée."
-            rows={derivedPreview}
-          />
+              <PoseKeypointsPanel
+                title="Points dérivés (virtual landmarks)"
+                emptyText="Ils apparaîtront dès qu’une pose est détectée."
+                rows={derivedPreview}
+              />
 
-          <p className="muted" style={{ marginTop: 10 }}>
-            Important: ces points dérivés peuvent aussi être recalculés côté scoring (Python) à partir des 33 natifs.
-          </p>
+              <p className="muted" style={{ marginTop: 10 }}>
+                Important: ces points dérivés peuvent aussi être recalculés côté scoring (Python) à partir des 33 natifs.
+              </p>
+            </>
+          ) : null}
         </div>
       </div>
     </section>
