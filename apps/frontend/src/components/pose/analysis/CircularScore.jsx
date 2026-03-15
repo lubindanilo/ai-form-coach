@@ -1,17 +1,21 @@
 import React from "react";
-import { getScoreColor, getScoreColorLight, getScoreLabel, getTrackColor } from "./scoreTheme.js";
+import { getScoreColor, getScoreColorLight, getScoreLabel, getTrackColor, normalizeScore } from "./scoreTheme.js";
 
 /**
  * Jauge circulaire de score (0–max).
  * Présentation uniquement : valeur, max, couleurs et libellé dérivés du thème.
+ * Le score est normalisé (0–1 → 0–100, chaînes "80/100", etc.).
  */
 export default function CircularScore({ value, max = 100, size = 160, strokeWidth = 10 }) {
-  const score = Math.max(0, Math.min(max, Number(value)));
-  const pct = max > 0 ? score / max : 0;
-  const color = getScoreColor(score);
-  const colorLight = getScoreColorLight(score);
+  const overallScore = normalizeScore(value);
+  const pct = max > 0 ? overallScore / max : 0;
+  const color = getScoreColor(overallScore);
+  const colorLight = getScoreColorLight(overallScore);
   const trackColor = getTrackColor();
-  const label = getScoreLabel(score);
+  const label = getScoreLabel(overallScore);
+
+  // DEBUG provisoire : à retirer une fois le bon format de score confirmé
+  console.log("CircularScore — score brut =", value, "type =", typeof value, "Number(value) =", Number(value), "overallScore (normalisé 0–100) =", overallScore, "label =", label, "color =", color);
 
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -62,7 +66,7 @@ export default function CircularScore({ value, max = 100, size = 160, strokeWidt
         }}
       >
         <span style={{ fontSize: "2rem", fontWeight: 700, lineHeight: 1, color: "#f2f2f2" }}>
-          {Math.round(score)}
+          {Math.round(overallScore)}
         </span>
         <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)" }}>/100</span>
         <span style={{ fontSize: "0.9rem", fontWeight: 500, color: "rgba(255,255,255,0.9)", marginTop: 2 }}>

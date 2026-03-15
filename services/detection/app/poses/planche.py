@@ -12,6 +12,10 @@ def score(lms: List[P], f: Dict[str, float]) -> float:
     hands_below = f["score_hands_below_shoulders"]
     hands_above = f["score_hands_above_shoulders"]
 
+    # Strong penalty when body is vertical (handstand): avoid classifying handstand as planche.
+    vertical_body = closeness_to(90, f["body_tilt"], 18)
+    anti_handstand = clamp01(1.0 - 0.90 * vertical_body)
+
     horizontal = closeness_to(0, f["body_tilt"], 15)
     torso_horizontal = closeness_to(0, f["torso_tilt"], 18)
     legs_horizontal = closeness_to(0, f["legs_tilt"], 18)
@@ -57,4 +61,4 @@ def score(lms: List[P], f: Dict[str, float]) -> float:
         * clamp01(0.30 + 0.70 * hips_far)
     )
 
-    return clamp01(view_gate * base * anti_lsit * anti_lever * anti_elbow * gate)
+    return clamp01(view_gate * base * anti_lsit * anti_lever * anti_elbow * anti_handstand * gate)

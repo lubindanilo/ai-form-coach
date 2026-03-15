@@ -9,7 +9,9 @@ from ..pose_features import (
 def score(lms: List[P], f: Dict[str, float]) -> float:
     view_gate = clamp01(0.35 + 0.65 * max(f["profile_score"], f["frontal_score"]))  # ok face OU profil
 
-    inv = f["score_legs_above_torso"]
+    # Inversion: legs above torso (feet up in image) OR legs below torso (feet down in image)
+    # both indicate an inverted vertical body (handstand).
+    inv = max(f["score_legs_above_torso"], f["score_legs_below_torso"])
     elbows = safe_mean(closeness_to(180, f["elbow_l"], 30), closeness_to(180, f["elbow_r"], 30))
     knees = safe_mean(closeness_to(180, f["knee_l"], 25), closeness_to(180, f["knee_r"], 25))
 

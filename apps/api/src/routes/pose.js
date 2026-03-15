@@ -3,6 +3,7 @@ const { z } = require("zod");
 const Analysis = require("../models/Analysis");
 const { classifyPose, scoreTechnique } = require("../scoring");
 const { putJson } = require("../s3");
+const { getTopImprovements } = require("../feedback");
 
 const router = express.Router();
 
@@ -119,6 +120,13 @@ router.post("/confirm", async (req, res) => {
         figure: userLabel,
         landmarks: analysis.landmarks
       });
+      if (techniqueScore?.dimensions) {
+        techniqueScore.improvements = getTopImprovements(
+          techniqueScore.dimensions,
+          techniqueScore.figure ?? userLabel,
+          { limit: 3 }
+        );
+      }
     } catch (scoreErr) {
       console.error("Error while calling scoring service in /api/pose/confirm:", scoreErr);
       techniqueScore = null;

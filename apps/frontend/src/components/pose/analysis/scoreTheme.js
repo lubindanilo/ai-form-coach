@@ -4,17 +4,44 @@
  */
 
 const BANDS = [
-  { min: 80, max: 100, color: "#22c55e", colorLight: "#4ade80", label: "Très bien" },
-  { min: 60, max: 79, color: "#84cc16", colorLight: "#a3e635", label: "Bien" },
-  { min: 40, max: 59, color: "#eab308", colorLight: "#facc15", label: "Moyen" },
-  { min: 0, max: 39, color: "#ef4444", colorLight: "#f87171", label: "À améliorer" },
+  { min: 90, max: 100, color: "#047857", colorLight: "#059669", label: "Excellent" },
+  { min: 80, max: 89, color: "#16a34a", colorLight: "#22c55e", label: "Très bien" },
+  { min: 70, max: 79, color: "#65a30d", colorLight: "#84cc16", label: "Bien" },
+  { min: 55, max: 69, color: "#ea580c", colorLight: "#f97316", label: "Correct" },
+  { min: 40, max: 54, color: "#c2410c", colorLight: "#ea580c", label: "Fragile" },
+  { min: 0, max: 39, color: "#b91c1c", colorLight: "#dc2626", label: "À retravailler" },
 ];
 
 /** Score maximum utilisé pour les bandes */
 export const SCORE_MAX = 100;
 
+/**
+ * Normalise toute valeur reçue en score 0–100.
+ * Gère : échelle 0–1 (ex. 0.8 → 80), "80/100", "80 %", "80,0", undefined/null/objet/string vide.
+ */
+export function normalizeScore(score) {
+  if (score === undefined || score === null || score === "") {
+    return 0;
+  }
+  if (typeof score === "object" || typeof score === "boolean") {
+    return 0;
+  }
+  if (typeof score === "number") {
+    if (Number.isNaN(score)) return 0;
+    if (score > 0 && score <= 1) return Math.round(score * 100);
+    return Math.max(0, Math.min(SCORE_MAX, Math.round(score)));
+  }
+  const s = String(score).trim();
+  if (s === "") return 0;
+  const match = s.match(/^(\d+[,.]?\d*)\s*\/\s*100$/) || s.match(/^(\d+[,.]?\d*)\s*%?$/) || s.match(/^(\d+[,.]?\d*)/);
+  const num = match ? parseFloat(match[1].replace(",", ".")) : NaN;
+  if (Number.isNaN(num)) return 0;
+  if (num > 0 && num <= 1) return Math.round(num * 100);
+  return Math.max(0, Math.min(SCORE_MAX, Math.round(num)));
+}
+
 function findBand(score) {
-  const value = Math.max(0, Math.min(SCORE_MAX, Number(score)));
+  const value = normalizeScore(score);
   return BANDS.find((b) => value >= b.min && value <= b.max) || BANDS[BANDS.length - 1];
 }
 

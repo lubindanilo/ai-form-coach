@@ -27,8 +27,14 @@ export default function PoseResultPanel({
       {!classify ? null : (
         <div style={{ display: "grid", gap: 10 }}>
           <div className="muted">
-            <div>
-              Figure détectée: <span className="mono">{classify.pose}</span>
+            <div
+              style={{
+                fontSize: "1.5rem",
+                fontFamily: "'Segoe UI', system-ui, sans-serif",
+                fontWeight: 500,
+              }}
+            >
+              Figure détectée: <span style={{ fontWeight: 600 }}>{classify.pose}</span>
             </div>
             {SHOW_RESULT_DEBUG ? (
               <>
@@ -93,7 +99,16 @@ export default function PoseResultPanel({
               </select>
             </label>
 
-            <button className="btn" onClick={confirmLabel} disabled={!userLabel || confirmStatus === "confirming"}>
+            <button
+              className="btn"
+              onClick={confirmLabel}
+              disabled={!userLabel || confirmStatus === "confirming"}
+              style={{
+                fontSize: "1rem",
+                fontFamily: "'Segoe UI', system-ui, sans-serif",
+                fontWeight: 600,
+              }}
+            >
               {confirmStatus === "confirming" ? "Confirmation..." : "Confirmer la figure et lancer l'analyse technique"}
             </button>
 
@@ -104,6 +119,29 @@ export default function PoseResultPanel({
                   <div style={{ marginTop: 8 }}>
                     <p className="muted" style={{ marginBottom: 8 }}>Résultat d'analyse</p>
                     <AnalysisDashboard scores={techniqueScore.scores} />
+                    {Array.isArray(techniqueScore.improvements) && techniqueScore.improvements.length > 0 ? (
+                      <div style={{ marginTop: 12 }}>
+                        <p className="muted" style={{ marginBottom: 6, fontSize: "0.95rem" }}>
+                          Points d'amélioration
+                        </p>
+                        <ol
+                          className="list"
+                          style={{
+                            margin: 0,
+                            paddingLeft: 20,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                          }}
+                        >
+                          {techniqueScore.improvements.map((item, i) => (
+                            <li key={`${item.metricKey}-${i}`} style={{ color: "#e2e2e2" }}>
+                              {item.message}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {SHOW_RESULT_DEBUG && techniqueScore ? (
