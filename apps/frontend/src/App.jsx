@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext.jsx";
 import PoseSandbox from "./components/PoseSandbox.jsx";
@@ -12,6 +12,11 @@ function Header() {
   const navigate = useNavigate();
   const location = useLocation();
   const isLanding = location.pathname === "/" && !user;
+  const [isMenuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   async function handleLogout() {
     await logout();
@@ -19,13 +24,23 @@ function Header() {
   }
 
   return (
-    <header className="header">
+    <header className={`header ${isMenuOpen ? "header--menu-open" : ""}`}>
       <div className="header-nav">
         <h1 style={{ margin: 0 }}>
           <Link to="/" style={{ color: "inherit", textDecoration: "none" }}>
             Calisthenics AI
           </Link>
         </h1>
+        <button
+          type="button"
+          className="header-nav-toggle"
+          aria-label="Ouvrir le menu"
+          onClick={() => setMenuOpen((o) => !o)}
+        >
+          <span className="header-nav-toggle-bar" />
+          <span className="header-nav-toggle-bar" />
+          <span className="header-nav-toggle-bar" />
+        </button>
         <div className="header-nav-links">
           {!loading && (
             <>
