@@ -54,7 +54,6 @@ function Header() {
       </div>
       {!isLanding && (
         <p className="muted" style={{ margin: 0 }}>
-          Analyse ta posture de calisthénie en quelques secondes
         </p>
       )}
     </header>

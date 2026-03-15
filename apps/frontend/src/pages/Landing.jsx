@@ -6,28 +6,24 @@ export default function Landing() {
   return (
     <div className="landing">
       <section className="landing-hero">
-        <div className="landing-hero__text">
-          <h1 className="landing-hero__title">
-            Analyse ta posture de calisthénie en quelques secondes
-          </h1>
-          <p className="landing-hero__desc">
-            Upload une photo, détecte la figure, reçois un score technique et 3 conseils concrets.
-          </p>
-          <div className="landing-hero__ctas">
-            <Link to="/analyze" className="landing-cta landing-cta--primary">
-              Essayer une analyse
-            </Link>
-            <Link to="/register" className="landing-cta landing-cta--secondary">
-              Créer un compte
-            </Link>
+        <div className="landing-hero__left">
+          <div className="landing-hero__text">
+            <h1 className="landing-hero__title">
+            Découvres exactement quoi corriger sur tes figures de calisthénie et progresse plus vite
+            </h1>
+            <p className="landing-hero__desc">
+            Importe une photo, obtiens un score technique clair et 3 corrections immédiatement applicables.
+            </p>
+            <div className="landing-hero__ctas">
+              <Link to="/analyze" className="landing-cta landing-cta--primary">
+                Analyser ma figure
+              </Link>
+              <Link to="/register" className="landing-cta landing-cta--secondary">
+                Créer un compte
+              </Link>
+            </div>
           </div>
-        </div>
-        <div className="landing-hero__demo">
-          <LandingDemoCard />
-        </div>
-      </section>
-
-      <section className="landing-features">
+          <section className="landing-features">
         <div className="landing-feature-card">
           <div className="landing-feature-card__icon landing-feature-card__icon--detection" aria-hidden>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -36,9 +32,9 @@ export default function Landing() {
               <path d="m3 21 9-9" /><path d="m12 12 6 6" /><path d="m3 12 3-3 3-3" />
             </svg>
           </div>
-          <h3 className="landing-feature-card__title">Détection automatique</h3>
+          <h3 className="landing-feature-card__title">Diagnostic immédiat</h3>
           <p className="landing-feature-card__desc">
-            Il suffit d'uploader une photo et on détecte automatiquement ta figure de calisthénie.
+          Upload ta photo et obtiens instantanément une analyse claire de ta figure, comme avec un coach personnel.
           </p>
         </div>
         <div className="landing-feature-card">
@@ -48,9 +44,9 @@ export default function Landing() {
               <circle cx="12" cy="12" r="9" strokeDasharray="45 32" strokeDashoffset="11" transform="rotate(-90 12 12)" />
             </svg>
           </div>
-          <h3 className="landing-feature-card__title">Score global + métriques</h3>
+          <h3 className="landing-feature-card__title">Comprends exactement ce qui te bloque</h3>
           <p className="landing-feature-card__desc">
-            Reçois un score technique et plusieurs indicateurs détaillés de ta posture.
+          Un score global et des métriques détaillées pour voir en un coup d’œil ce qui freine ta posture.
           </p>
         </div>
         <div className="landing-feature-card">
@@ -60,10 +56,16 @@ export default function Landing() {
               <path d="M21 6v4h-4" />
             </svg>
           </div>
-          <h3 className="landing-feature-card__title">Historique de progression</h3>
+          <h3 className="landing-feature-card__title">Mesure ta progression dans le temps
+          </h3>
           <p className="landing-feature-card__desc">
-            Suis ta progression au fil des analyses et visualise tes progrès sur chaque figure.
+          Compare tes analyses, vois ce qui s’améliore réellement et valide objectivement tes progrès sur chaque figure.
           </p>
+        </div>
+          </section>
+        </div>
+        <div className="landing-hero__demo">
+          <LandingDemoCard />
         </div>
       </section>
     </div>

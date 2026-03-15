@@ -49,9 +49,4 @@ def classify_pose(lms: List[P], min_visibility: float = 0.4) -> Tuple[str, float
 
     maybe_log_debug(best_pose, best_conf, scores, f)
 
-    if best_conf < 0.17:
-        warnings.append(
-            f"L'image est trop floue ou le cadrage est mauvais. La détection de la pose est peu fiable."
-        )
-
     return best_pose, best_conf, scores, warnings
