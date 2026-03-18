@@ -1,4 +1,5 @@
 import { PoseLandmarker } from "@mediapipe/tasks-vision";
+import { resolveApiUrl } from "./api.js";
 
 export function round4(v) {
   if (typeof v !== "number" || Number.isNaN(v)) return 0;
@@ -73,7 +74,8 @@ export function mapLandmarksForApi(lms) {
 }
 
 export async function fetchJson(url, options = {}) {
-  const res = await fetch(url, { ...options, credentials: "include" });
+  const resolved = resolveApiUrl(url);
+  const res = await fetch(resolved, { ...options, credentials: "include" });
   const text = await res.text();
   let data = null;
   try {

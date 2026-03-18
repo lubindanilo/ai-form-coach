@@ -2,7 +2,18 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/clien
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 function makeS3Client() {
-  return new S3Client({ region: process.env.AWS_REGION });
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+
+  // Compat: some envs use AWS_SECRET_KEY instead of AWS_SECRET_ACCESS_KEY
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_KEY;
+
+  const credentials =
+    accessKeyId && secretAccessKey
+      ? { accessKeyId, secretAccessKey }
+      : undefined; // fallback to default provider chain (IAM role, etc.)
+
+  return new S3Client({ region, credentials });
 }
 
 async function presignPutObject({ bucket, key, contentType, expiresIn = 120 }) {

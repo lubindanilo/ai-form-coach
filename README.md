@@ -500,3 +500,89 @@ npm start
 
 Adapte les URLs, ports et variables d’environnement selon ton environnement (dev, staging, prod).
 
+---
+
+## Déploiement (prod) sur un VPS unique (Docker + Nginx + HTTPS)
+
+Cette section correspond à une mise en ligne “single box” : **un VPS** héberge Docker (API + services + Mongo), et **Nginx** expose l’API en HTTPS sur un sous-domaine.
+
+### 0) Préparer le DNS
+
+- Créer un enregistrement **A** :
+  - `api.formetry.io` → IP publique du VPS
+
+### 1) Préparer le VPS (Ubuntu)
+
+- Lancer le script de bootstrap (installe Docker, Nginx, Certbot, UFW) :
+
+```bash
+sudo bash infra/scripts/vps-bootstrap-ubuntu.sh
+```
+
+### 2) Cloner et configurer l’app
+
+```bash
+sudo mkdir -p /opt
+sudo chown "$USER":"$USER" /opt
+cd /opt
+git clone <TON_URL_GITHUB> ai-form-coach
+cd ai-form-coach
+cp .env.example .env
+nano .env
+```
+
+Variables recommandées en prod (exemples) :
+
+- `CORS_ORIGINS=https://formetry.io,https://formetry.fr,https://www.formetry.io,https://www.formetry.fr`
+- `RATE_LIMIT_PER_MINUTE=240`
+
+> En prod, ne pas exposer Mongo/detection/scoring : ils restent dans le réseau Docker.
+
+### 3) Lancer la stack Docker
+
+```bash
+cd /opt/ai-form-coach/infra
+docker compose up --build -d
+```
+
+Vérifications :
+
+```bash
+curl -sS http://127.0.0.1:3000/health
+curl -i  http://127.0.0.1:3000/ready
+docker ps
+```
+
+### 4) Configurer Nginx pour l’API + HTTPS
+
+Copier la conf Nginx fournie :
+
+```bash
+sudo mkdir -p /var/www/certbot
+sudo cp /opt/ai-form-coach/infra/nginx/api.formetry.io.conf /etc/nginx/sites-available/api.formetry.io.conf
+sudo ln -sf /etc/nginx/sites-available/api.formetry.io.conf /etc/nginx/sites-enabled/api.formetry.io.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Générer le certificat Let’s Encrypt :
+
+```bash
+sudo certbot --nginx -d api.formetry.io
+```
+
+### 5) Connecter le frontend (Vercel)
+
+Sur Vercel, configurer en prod :
+
+- `VITE_API_BASE_URL=https://api.formetry.io`
+
+Puis redéployer le frontend.
+
+### 6) Test de bout en bout (minimum)
+
+- `https://api.formetry.io/health` → doit renvoyer `{ "status": "ok" }`
+- depuis `https://formetry.io` :
+  - register/login
+  - appel à `/api/auth/me` (cookie JWT)
+
